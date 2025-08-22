@@ -259,8 +259,10 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         // Configuration
+        const ROOM_NAME = 'TestTranscriptionRoom'; // Sabit oda adı - tüm kullanıcılar aynı odada
+        
         const config = {
-            roomName: `POCTranscribe_${Math.random().toString(36).substring(7)}`,
+            roomName: ROOM_NAME,
             displayName: 'Transcription User',
             transcriptHistory: [],
             ttsEnabled: false,
