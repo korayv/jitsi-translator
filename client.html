@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jitsi Meet with Live Transcription</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+        }
+        
+        #meet {
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            color: white;
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+        }
+        
+        #controls button {
+            background: #0056ff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            margin: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        #controls button:hover {
+            background: #0045d4;
+        }
+        
+        #controls button.active {
+            background: #00a86b;
+        }
+        
+        #controls button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        
+        #captions-container {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            max-width: 800px;
+            background: rgba(0, 0, 0, 0.85);
+            border-radius: 10px;
+            padding: 20px;
+            z-index: 999;
+            backdrop-filter: blur(10px);
+            max-height: 200px;
+            overflow-y: auto;
+            transition: opacity 0.3s;
+        }
+        
+        #captions-container.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .caption-line {
+            color: white;
+            font-size: 18px;
+            line-height: 1.5;
+            margin-bottom: 10px;
+            animation: fadeIn 0.3s;
+        }
+        
+        .caption-line.interim {
+            opacity: 0.7;
+            font-style: italic;
+        }
+        
+        .caption-line.original {
+            color: #ffcc00;
+            font-size: 16px;
+        }
+        
+        .caption-line.translated {
+            color: #00ff88;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
+        .message-container {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+        }
+        
+        .speaker-tag {
+            color: #0056ff;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        
+        #status {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-size: 14px;
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-indicator.active {
+            background: #00ff00;
+        }
+        
+        .status-indicator.inactive {
+            background: #ff0000;
+        }
+        
+        .status-indicator.processing {
+            background: #ffaa00;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        #language-selector {
+            margin-left: 10px;
+            padding: 5px;
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 5px;
+        }
+        
+        #tts-controls {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #444;
+        }
+        
+        #tts-voice-selector {
+            margin-left: 10px;
+            padding: 5px;
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="meet"></div>
+    
+    <div id="status">
+        <span class="status-indicator inactive" id="statusIndicator"></span>
+        <span id="statusText">Initializing...</span>
+    </div>
+    
+    <div id="controls">
+        <h3 style="margin-top: 0;">Transcription Controls</h3>
+        <button id="startTranscription">Start Transcription</button>
+        <button id="stopTranscription" disabled>Stop Transcription</button>
+        <button id="clearTranscripts">Clear</button>
+        <button id="downloadTranscripts">Download</button>
+        
+        <div style="margin-top: 10px;">
+            <label>My Language:</label>
+            <select id="language-selector">
+                <option value="tr-TR">Türkçe</option>
+                <option value="en-US">English (US)</option>
+                <option value="en-GB">English (UK)</option>
+                <option value="es-ES">Spanish</option>
+                <option value="fr-FR">French</option>
+                <option value="de-DE">German</option>
+                <option value="it-IT">Italian</option>
+                <option value="pt-BR">Portuguese (Brazil)</option>
+                <option value="ru-RU">Russian</option>
+                <option value="zh-CN">Chinese (Mandarin)</option>
+                <option value="ja-JP">Japanese</option>
+                <option value="ko-KR">Korean</option>
+                <option value="ar-SA">Arabic</option>
+                <option value="hi-IN">Hindi</option>
+            </select>
+        </div>
+        
+        <div style="margin-top: 10px;">
+            <label>Target Language:</label>
+            <select id="target-language-selector">
+                <option value="en-US">English (US)</option>
+                <option value="tr-TR">Türkçe</option>
+                <option value="en-GB">English (UK)</option>
+                <option value="es-ES">Spanish</option>
+                <option value="fr-FR">French</option>
+                <option value="de-DE">German</option>
+                <option value="it-IT">Italian</option>
+                <option value="pt-BR">Portuguese (Brazil)</option>
+                <option value="ru-RU">Russian</option>
+                <option value="zh-CN">Chinese (Mandarin)</option>
+                <option value="ja-JP">Japanese</option>
+                <option value="ko-KR">Korean</option>
+                <option value="ar-SA">Arabic</option>
+                <option value="hi-IN">Hindi</option>
+            </select>
+        </div>
+        
+        <div id="tts-controls">
+            <h4 style="margin-top: 0;">Text-to-Speech</h4>
+            <button id="toggleTTS">Enable TTS</button>
+            <div style="margin-top: 10px;">
+                <label>Voice:</label>
+                <select id="tts-voice-selector">
+                    <!-- Will be populated dynamically -->
+                </select>
+            </div>
+            <div style="margin-top: 10px;">
+                <button id="testTTS">Test TTS</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="captions-container" class="hidden">
+        <div id="captions"></div>
+    </div>
+
+    <script src="https://meet.jit.si/external_api.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        // Configuration
+        const config = {
+            roomName: `POCTranscribe_${Math.random().toString(36).substring(7)}`,
+            displayName: 'Transcription User',
+            transcriptHistory: [],
+            ttsEnabled: false,
+            selectedVoice: null,
+            userLanguage: 'tr-TR', // Kullanıcının ana dili (Türkçe)
+            targetLanguage: 'en-US', // Hedef dil (İngilizce)
+            userId: Math.random().toString(36).substring(7)
+        };
+
+        // Socket.IO connection
+        const socket = io();
+        
+        socket.on('connect', () => {
+            console.log('Connected to translation server');
+            socket.emit('join-room', {
+                roomName: config.roomName,
+                userId: config.userId,
+                language: config.userLanguage
+            });
+        });
+
+        // Listen for translated messages from other users
+        socket.on('translated-message', (data) => {
+            displayTranslatedMessage(data.originalText, data.translatedText, data.fromLanguage, data.toLanguage);
+            
+            // TTS for translated text
+            if (config.ttsEnabled) {
+                speak(data.translatedText);
+            }
+        });
+        
+        // Initialize Jitsi Meet
+        const api = new JitsiMeetExternalAPI("meet.jit.si", {
+            roomName: config.roomName,
+            parentNode: document.querySelector("#meet"),
+            width: '100%',
+            height: '100%',
+            configOverwrite: { 
+                prejoinPageEnabled: false,
+                startWithAudioMuted: false,
+                startWithVideoMuted: false,
+                enableNoisyMicDetection: false
+            },
+            interfaceConfigOverwrite: {
+                SHOW_JITSI_WATERMARK: false,
+                SHOW_WATERMARK_FOR_GUESTS: false,
+                TOOLBAR_BUTTONS: [
+                    'microphone', 'camera', 'desktop', 'fullscreen',
+                    'fodeviceselection', 'hangup', 'chat', 'recording',
+                    'livestreaming', 'settings', 'raisehand',
+                    'videoquality', 'filmstrip', 'participants-pane', 'feedback'
+                ]
+            }
+        });
+        
+        // Update status
+        function updateStatus(text, status = 'inactive') {
+            document.getElementById('statusText').textContent = text;
+            const indicator = document.getElementById('statusIndicator');
+            indicator.className = `status-indicator ${status}`;
+        }
+        
+        // Check for browser support
+        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+            updateStatus('Browser not supported. Please use Chrome.', 'inactive');
+            document.getElementById('startTranscription').disabled = true;
+        } else {
+            updateStatus('Ready to start transcription', 'inactive');
+        }
+        
+        // Speech Recognition Setup
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition = null;
+        let isTranscribing = false;
+        let finalTranscript = '';
+        let interimTranscript = '';
+        
+        function initializeRecognition() {
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.maxAlternatives = 1;
+            recognition.lang = document.getElementById('language-selector').value;
+            
+            recognition.onstart = () => {
+                updateStatus('Transcription active', 'active');
+                document.getElementById('captions-container').classList.remove('hidden');
+            };
+            
+            recognition.onresult = (event) => {
+                interimTranscript = '';
+                
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript + ' ';
+                        
+                        // Add to history
+                        const timestamp = new Date().toLocaleTimeString();
+                        config.transcriptHistory.push({
+                            time: timestamp,
+                            text: transcript,
+                            speaker: 'You'
+                        });
+                        
+                        // Send to translation server
+                        socket.emit('speech-input', {
+                            text: transcript,
+                            fromLanguage: config.userLanguage,
+                            toLanguage: config.targetLanguage,
+                            roomName: config.roomName,
+                            userId: config.userId
+                        });
+                        
+                        // TTS if enabled (for own speech)
+                        if (config.ttsEnabled) {
+                            speak(transcript);
+                        }
+                        
+                        // Update display
+                        displayTranscript(finalTranscript, false);
+                    } else {
+                        interimTranscript += transcript;
+                        updateStatus('Processing speech...', 'processing');
+                        displayTranscript(finalTranscript + interimTranscript, true);
+                    }
+                }
+            };
+            
+            recognition.onerror = (event) => {
+                console.error('Speech recognition error:', event.error);
+                
+                if (event.error === 'no-speech') {
+                    updateStatus('No speech detected', 'processing');
+                } else if (event.error === 'network') {
+                    updateStatus('Network error', 'inactive');
+                } else {
+                    updateStatus(`Error: ${event.error}`, 'inactive');
+                }
+                
+                // Auto-restart for certain errors
+                if (event.error === 'no-speech' && isTranscribing) {
+                    setTimeout(() => {
+                        if (isTranscribing) {
+                            recognition.start();
+                        }
+                    }, 1000);
+                }
+            };
+            
+            recognition.onend = () => {
+                if (isTranscribing) {
+                    // Auto-restart
+                    setTimeout(() => {
+                        if (isTranscribing) {
+                            try {
+                                recognition.start();
+                                updateStatus('Transcription restarted', 'active');
+                            } catch (e) {
+                                console.error('Failed to restart:', e);
+                            }
+                        }
+                    }, 500);
+                } else {
+                    updateStatus('Transcription stopped', 'inactive');
+                    document.getElementById('captions-container').classList.add('hidden');
+                }
+            };
+        }
+        
+        function displayTranscript(text, isInterim) {
+            const captionsDiv = document.getElementById('captions');
+            captionsDiv.innerHTML = '';
+            
+            if (text.trim()) {
+                const line = document.createElement('div');
+                line.className = isInterim ? 'caption-line interim' : 'caption-line';
+                
+                const speaker = document.createElement('span');
+                speaker.className = 'speaker-tag';
+                speaker.textContent = 'You:';
+                
+                const content = document.createElement('span');
+                content.textContent = text;
+                
+                line.appendChild(speaker);
+                line.appendChild(content);
+                captionsDiv.appendChild(line);
+            }
+        }
+        
+        function displayTranslatedMessage(originalText, translatedText, fromLang, toLang) {
+            const captionsDiv = document.getElementById('captions');
+            
+            // Create container for this message
+            const messageContainer = document.createElement('div');
+            messageContainer.className = 'message-container';
+            
+            // Original text
+            const originalLine = document.createElement('div');
+            originalLine.className = 'caption-line original';
+            originalLine.innerHTML = `
+                <span class="speaker-tag">Other (${fromLang}):</span>
+                <span>${originalText}</span>
+            `;
+            
+            // Translated text
+            const translatedLine = document.createElement('div');
+            translatedLine.className = 'caption-line translated';
+            translatedLine.innerHTML = `
+                <span class="speaker-tag">Translated (${toLang}):</span>
+                <span>${translatedText}</span>
+            `;
+            
+            messageContainer.appendChild(originalLine);
+            messageContainer.appendChild(translatedLine);
+            captionsDiv.appendChild(messageContainer);
+            
+            // Auto-scroll
+            captionsDiv.scrollTop = captionsDiv.scrollHeight;
+        }
+        
+        // TTS Setup
+        const synth = window.speechSynthesis;
+        let voices = [];
+        
+        function loadVoices() {
+            voices = synth.getVoices();
+            const voiceSelector = document.getElementById('tts-voice-selector');
+            voiceSelector.innerHTML = '';
+            
+            const lang = document.getElementById('language-selector').value;
+            const filteredVoices = voices.filter(voice => voice.lang.startsWith(lang.substring(0, 2)));
+            
+            if (filteredVoices.length === 0) {
+                const option = document.createElement('option');
+                option.textContent = 'No voices available for selected language';
+                voiceSelector.appendChild(option);
+            } else {
+                filteredVoices.forEach((voice, index) => {
+                    const option = document.createElement('option');
+                    option.value = index;
+                    option.textContent = `${voice.name} (${voice.lang})`;
+                    voiceSelector.appendChild(option);
+                });
+            }
+        }
+        
+        // Load voices
+        if (synth.onvoiceschanged !== undefined) {
+            synth.onvoiceschanged = loadVoices;
+        }
+        loadVoices();
+        
+        function speak(text) {
+            if (!config.ttsEnabled || !text.trim()) return;
+            
+            // Cancel any ongoing speech
+            synth.cancel();
+            
+            const utterance = new SpeechSynthesisUtterance(text);
+            const voiceSelector = document.getElementById('tts-voice-selector');
+            const selectedVoiceIndex = voiceSelector.value;
+            
+            if (voices[selectedVoiceIndex]) {
+                utterance.voice = voices[selectedVoiceIndex];
+            }
+            
+            utterance.rate = 1.0;
+            utterance.pitch = 1.0;
+            utterance.volume = 0.8;
+            
+            synth.speak(utterance);
+        }
+        
+        // Event Listeners
+        document.getElementById('startTranscription').addEventListener('click', () => {
+            if (!isTranscribing) {
+                isTranscribing = true;
+                finalTranscript = '';
+                interimTranscript = '';
+                
+                initializeRecognition();
+                recognition.start();
+                
+                document.getElementById('startTranscription').disabled = true;
+                document.getElementById('stopTranscription').disabled = false;
+            }
+        });
+        
+        document.getElementById('stopTranscription').addEventListener('click', () => {
+            if (isTranscribing) {
+                isTranscribing = false;
+                if (recognition) {
+                    recognition.stop();
+                }
+                
+                document.getElementById('startTranscription').disabled = false;
+                document.getElementById('stopTranscription').disabled = true;
+            }
+        });
+        
+        document.getElementById('clearTranscripts').addEventListener('click', () => {
+            finalTranscript = '';
+            interimTranscript = '';
+            config.transcriptHistory = [];
+            document.getElementById('captions').innerHTML = '';
+        });
+        
+        document.getElementById('downloadTranscripts').addEventListener('click', () => {
+            if (config.transcriptHistory.length === 0) {
+                alert('No transcripts to download');
+                return;
+            }
+            
+            let content = `Transcription Session - ${new Date().toLocaleString()}\n`;
+            content += `Room: ${config.roomName}\n\n`;
+            
+            config.transcriptHistory.forEach(entry => {
+                content += `[${entry.time}] ${entry.speaker}: ${entry.text}\n`;
+            });
+            
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `transcript_${Date.now()}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+        
+        document.getElementById('language-selector').addEventListener('change', () => {
+            config.userLanguage = document.getElementById('language-selector').value;
+            if (recognition && isTranscribing) {
+                recognition.stop();
+                setTimeout(() => {
+                    initializeRecognition();
+                    recognition.start();
+                }, 500);
+            }
+            loadVoices();
+        });
+        
+        document.getElementById('target-language-selector').addEventListener('change', () => {
+            config.targetLanguage = document.getElementById('target-language-selector').value;
+        });
+        
+        document.getElementById('toggleTTS').addEventListener('click', (e) => {
+            config.ttsEnabled = !config.ttsEnabled;
+            e.target.textContent = config.ttsEnabled ? 'Disable TTS' : 'Enable TTS';
+            e.target.classList.toggle('active', config.ttsEnabled);
+        });
+        
+        document.getElementById('testTTS').addEventListener('click', () => {
+            const testText = 'This is a test of the text to speech system.';
+            speak(testText);
+        });
+        
+        // Jitsi API Events
+        api.addEventListener('videoConferenceJoined', () => {
+            console.log('Joined conference:', config.roomName);
+            updateStatus(`Joined room: ${config.roomName}`, 'inactive');
+        });
+        
+        api.addEventListener('participantJoined', (event) => {
+            console.log('Participant joined:', event);
+        });
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (recognition) {
+                recognition.stop();
+            }
+            if (api) {
+                api.dispose();
+            }
+        });
+        
+        // Show room name for sharing
+        console.log(`Share this room name to invite others: ${config.roomName}`);
+        
+        // Add room info to status
+        setTimeout(() => {
+            updateStatus(`Room: ${config.roomName} | Ready`, 'inactive');
+        }, 2000);
+    </script>
+</body>
+</html>
