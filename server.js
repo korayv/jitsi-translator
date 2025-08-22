@@ -3,6 +3,7 @@ const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
 const { Translate } = require('@google-cloud/translate').v2;
+require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
@@ -13,54 +14,26 @@ const io = socketIo(server, {
     }
 });
 
-// Google Translate setup (isteğe bağlı - API key gerekli)
-// const translate = new Translate({
-//     projectId: 'your-google-project-id',
-//     keyFilename: 'path/to/service-account-key.json'
-// });
+// Google Translate setup
+const translate = new Translate({
+    projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
+    keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS
+});
 
-// Basit çeviri fonksiyonu (demo için)
+// Çeviri fonksiyonu
 async function translateText(text, fromLang, toLang) {
-    // Gerçek projede Google Translate API veya Azure Translator kullanın
-    // Şimdilik basit bir mock çeviri
-    const translations = {
-        'en-US': {
-            'tr-TR': {
-                'hello': 'merhaba',
-                'how are you': 'nasılsın',
-                'good morning': 'günaydın',
-                'thank you': 'teşekkür ederim',
-                'yes': 'evet',
-                'no': 'hayır'
-            }
-        },
-        'tr-TR': {
-            'en-US': {
-                'merhaba': 'hello',
-                'nasılsın': 'how are you',
-                'günaydın': 'good morning',
-                'teşekkür ederim': 'thank you',
-                'evet': 'yes',
-                'hayır': 'no'
-            }
-        }
-    };
-
-    const lowerText = text.toLowerCase();
-    const langPair = translations[fromLang]?.[toLang];
-    
-    if (langPair) {
-        for (const [source, target] of Object.entries(langPair)) {
-            if (lowerText.includes(source)) {
-                return text.replace(new RegExp(source, 'gi'), target);
-            }
-        }
+    try {
+        // Google Translate API kullan
+        const [translation] = await translate.translate(text, {
+            from: fromLang.substring(0, 2), // 'tr-TR' -> 'tr'
+            to: toLang.substring(0, 2)      // 'en-US' -> 'en'
+        });
+        return translation;
+    } catch (error) {
+        console.error('Google Translate error:', error);
+        throw error;
     }
-    
-    // Çeviri bulunamazsa orijinal metni döndür
-    return `[${toLang}] ${text}`;
 }
-
 // Statik dosyaları servis et
 app.use(express.static(path.join(__dirname)));
 

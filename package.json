@@ -8,14 +8,20 @@
     "dev": "nodemon server.js"
   },
   "dependencies": {
+    "@google-cloud/translate": "^8.0.2",
+    "dotenv": "^16.6.1",
     "express": "^4.18.2",
-    "socket.io": "^4.7.2",
-    "@google-cloud/translate": "^8.0.2"
+    "socket.io": "^4.7.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
   },
-  "keywords": ["jitsi", "translation", "real-time", "websocket"],
+  "keywords": [
+    "jitsi",
+    "translation",
+    "real-time",
+    "websocket"
+  ],
   "author": "Your Name",
   "license": "MIT"
 }
