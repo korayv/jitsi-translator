@@ -629,7 +629,8 @@
                 prejoinPageEnabled: false,
                 startWithAudioMuted: false,
                 startWithVideoMuted: false,
-                enableNoisyMicDetection: false
+                enableNoisyMicDetection: false,
+                disableAudioLevels: false
             },
             interfaceConfigOverwrite: {
                 SHOW_JITSI_WATERMARK: false,
@@ -642,6 +643,130 @@
                 ]
             }
         });
+
+        // Audio ducking variables
+        let originalJitsiVolume = 1.0;
+        let isAudioDucked = false;
+        let jitsiAudioElements = [];
+
+        // Audio ducking functions
+        function findJitsiAudioElements() {
+            // Find all audio elements in the Jitsi iframe and container
+            const meetContainer = document.querySelector('#meet');
+            const audioElements = [];
+            
+            // Get audio elements from main document
+            audioElements.push(...document.querySelectorAll('audio'));
+            
+            // Try to get audio elements from Jitsi iframe (if accessible)
+            try {
+                const iframe = meetContainer.querySelector('iframe');
+                if (iframe && iframe.contentDocument) {
+                    audioElements.push(...iframe.contentDocument.querySelectorAll('audio'));
+                }
+            } catch (error) {
+                // Cross-origin access might be blocked
+                console.log('Cannot access iframe audio elements due to CORS');
+            }
+            
+            // Also check for video elements with audio
+            audioElements.push(...document.querySelectorAll('video'));
+            try {
+                const iframe = meetContainer.querySelector('iframe');
+                if (iframe && iframe.contentDocument) {
+                    audioElements.push(...iframe.contentDocument.querySelectorAll('video'));
+                }
+            } catch (error) {
+                // Cross-origin access might be blocked
+            }
+            
+            return audioElements.filter(el => el && !el.muted);
+        }
+
+        function duckJitsiAudio(duckLevel = 0.05) {
+            if (isAudioDucked) return;
+            
+            jitsiAudioElements = findJitsiAudioElements();
+            
+            jitsiAudioElements.forEach(audioEl => {
+                if (audioEl.volume !== undefined) {
+                    // Store original volume
+                    audioEl.originalVolume = audioEl.volume;
+                    // Duck the audio
+                    audioEl.volume = duckLevel;
+                }
+            });
+            
+            // More aggressive approach: Add CSS to lower volume of all audio/video elements
+            const style = document.createElement('style');
+            style.id = 'audio-duck-style';
+            style.textContent = `
+                audio, video {
+                    volume: ${duckLevel} !important;
+                }
+                #meet audio, #meet video {
+                    volume: ${duckLevel} !important;
+                }
+            `;
+            document.head.appendChild(style);
+            
+            // Try Jitsi API commands
+            try {
+                // Lower all participant volumes
+                api.executeCommand('setParticipantVolume', null, duckLevel);
+            } catch (error) {
+                console.log('Could not use Jitsi API for participant volume');
+            }
+            
+            isAudioDucked = true;
+            console.log(`Audio ducked to ${duckLevel * 100}%`);
+        }
+
+        function restoreJitsiAudio() {
+            if (!isAudioDucked) return;
+            
+            jitsiAudioElements.forEach(audioEl => {
+                if (audioEl.originalVolume !== undefined) {
+                    audioEl.volume = audioEl.originalVolume;
+                    delete audioEl.originalVolume;
+                }
+            });
+            
+            // Remove CSS ducking style
+            const duckStyle = document.getElementById('audio-duck-style');
+            if (duckStyle) {
+                duckStyle.remove();
+            }
+            
+            // Restore Jitsi API settings
+            try {
+                api.executeCommand('setParticipantVolume', null, 1.0); // Restore to full volume
+            } catch (error) {
+                console.log('Could not restore Jitsi API participant volume');
+            }
+            
+            isAudioDucked = false;
+            console.log('Audio restored to normal levels');
+        }
+
+        // Alternative approach: Mute/unmute participants during TTS
+        function muteAllParticipants() {
+            try {
+                // This will mute the audio output from other participants
+                api.executeCommand('muteEveryone');
+            } catch (error) {
+                console.log('Could not mute participants via API');
+            }
+        }
+
+        function unmuteAllParticipants() {
+            try {
+                // Note: This might not work due to permissions
+                api.executeCommand('unmuteEveryone'); 
+            } catch (error) {
+                console.log('Could not unmute participants via API');
+            }
+        }
         
         // Update status
         function updateStatus(text, status = 'inactive') {
@@ -989,16 +1114,39 @@
                 
                 audio.volume = 0.8;
                 
+                // Duck Jitsi audio when TTS starts playing
+                audio.addEventListener('play', () => {
+                    console.log('TTS started - ducking Jitsi audio');
+                    duckJitsiAudio(0.05); // Lower to 5% volume
+                });
+                
+                // Restore Jitsi audio when TTS ends
                 audio.addEventListener('ended', () => {
+                    console.log('TTS ended - restoring Jitsi audio');
+                    restoreJitsiAudio();
                     URL.revokeObjectURL(audioUrl);
+                });
+
+                // Also restore on error
+                audio.addEventListener('error', () => {
+                    console.log('TTS error - restoring Jitsi audio');
+                    restoreJitsiAudio();
+                    URL.revokeObjectURL(audioUrl);
+                });
+                
+                // Restore audio if TTS is paused/stopped
+                audio.addEventListener('pause', () => {
+                    restoreJitsiAudio();
                 });
                 
                 audio.play().catch(error => {
                     console.error('Failed to play TTS audio:', error);
+                    restoreJitsiAudio(); // Restore even if playback fails
                 });
                 
             } catch (error) {
                 console.error('Error playing TTS audio:', error);
+                restoreJitsiAudio(); // Restore on any error
             }
         }
         
@@ -1174,6 +1322,20 @@
         api.addEventListener('videoConferenceJoined', () => {
             console.log('Joined conference:', config.roomName);
             updateStatus(`Joined room: ${config.roomName}`, 'inactive');
+            
+            // Start monitoring for audio elements periodically
+            setInterval(() => {
+                if (isAudioDucked) {
+                    // Refresh audio elements and re-apply ducking
+                    const newAudioElements = findJitsiAudioElements();
+                    newAudioElements.forEach(audioEl => {
+                        if (audioEl.volume > 0.1 && !audioEl.originalVolume) {
+                            audioEl.originalVolume = audioEl.volume;
+                            audioEl.volume = 0.05;
+                        }
+                    });
+                }
+            }, 1000); // Check every second
         });
         
         api.addEventListener('participantJoined', (event) => {
