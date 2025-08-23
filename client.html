@@ -174,6 +174,91 @@
             height: 16px;
             fill: currentColor;
         }
+
+        /* Language Setup Modal */
+        #language-setup-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            backdrop-filter: blur(10px);
+        }
+
+        #language-setup-modal.hidden {
+            display: none;
+        }
+
+        .modal-content {
+            background: rgba(32, 32, 32, 0.95);
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-width: 450px;
+            width: 90%;
+            text-align: center;
+            color: white;
+        }
+
+        .modal-content h2 {
+            margin: 0 0 30px 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .modal-content p {
+            margin: 0 0 30px 0;
+            color: #b8bcc8;
+            line-height: 1.5;
+        }
+
+        .language-selection {
+            margin: 20px 0;
+            text-align: left;
+        }
+
+        .language-selection label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: white;
+        }
+
+        .language-selection select {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: white;
+            font-size: 16px;
+        }
+
+        .modal-buttons {
+            margin-top: 30px;
+        }
+
+        .modal-buttons button {
+            background: #166ff4;
+            color: white;
+            border: none;
+            padding: 12px 32px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .modal-buttons button:hover {
+            background: #0f5ad1;
+        }
         
         #captions-container {
             position: fixed;
@@ -306,6 +391,58 @@
 </head>
 <body>
     <div id="meet"></div>
+
+    <!-- Language Setup Modal -->
+    <div id="language-setup-modal">
+        <div class="modal-content">
+            <h2>🌐 Language Setup</h2>
+            <p>Set your language preferences once to start using real-time translation.</p>
+            
+            <div class="language-selection">
+                <label>Your Language (what you speak):</label>
+                <select id="modal-my-language">
+                    <option value="tr-TR">Türkçe</option>
+                    <option value="en-US">English (US)</option>
+                    <option value="en-GB">English (UK)</option>
+                    <option value="es-ES">Spanish</option>
+                    <option value="fr-FR">French</option>
+                    <option value="de-DE">German</option>
+                    <option value="it-IT">Italian</option>
+                    <option value="pt-BR">Portuguese (Brazil)</option>
+                    <option value="ru-RU">Russian</option>
+                    <option value="zh-CN">Chinese (Mandarin)</option>
+                    <option value="ja-JP">Japanese</option>
+                    <option value="ko-KR">Korean</option>
+                    <option value="ar-SA">Arabic</option>
+                    <option value="hi-IN">Hindi</option>
+                </select>
+            </div>
+
+            <div class="language-selection">
+                <label>Translate to (what you want to hear):</label>
+                <select id="modal-target-language">
+                    <option value="en-US">English (US)</option>
+                    <option value="tr-TR">Türkçe</option>
+                    <option value="en-GB">English (UK)</option>
+                    <option value="es-ES">Spanish</option>
+                    <option value="fr-FR">French</option>
+                    <option value="de-DE">German</option>
+                    <option value="it-IT">Italian</option>
+                    <option value="pt-BR">Portuguese (Brazil)</option>
+                    <option value="ru-RU">Russian</option>
+                    <option value="zh-CN">Chinese (Mandarin)</option>
+                    <option value="ja-JP">Japanese</option>
+                    <option value="ko-KR">Korean</option>
+                    <option value="ar-SA">Arabic</option>
+                    <option value="hi-IN">Hindi</option>
+                </select>
+            </div>
+
+            <div class="modal-buttons">
+                <button id="save-language-settings">Start Translation</button>
+            </div>
+        </div>
+    </div>
     
     <div id="status">
         <span class="status-indicator inactive" id="statusIndicator"></span>
@@ -409,7 +546,7 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         // Configuration
-        const ROOM_NAME = 'TestTranscriptionRoom'; // Sabit oda adı - tüm kullanıcılar aynı odada
+        const ROOM_NAME = 'TestTranscriptionRoom';
         
         const config = {
             roomName: ROOM_NAME,
@@ -417,11 +554,15 @@
             transcriptHistory: [],
             ttsEnabled: false,
             selectedVoice: null,
-            userLanguage: 'tr-TR', // Kullanıcının ana dili (Türkçe)
-            targetLanguage: 'en-US', // Hedef dil (İngilizce)
+            userLanguage: 'tr-TR',
+            targetLanguage: 'en-US', 
             userId: Math.random().toString(36).substring(7),
-            selectedVoiceId: 'pNInz6obpgDQGcFmaJgB', // Default ElevenLabs voice
-            elevenLabsVoices: []
+            selectedVoiceId: 'pNInz6obpgDQGcFmaJgB',
+            elevenLabsVoices: [],
+            languageSetupComplete: false,
+            vadEnabled: true,
+            silenceThreshold: 0.01,
+            speechTimeout: 1500
         };
 
         // Socket.IO connection
@@ -524,12 +665,116 @@
         let finalTranscript = '';
         let interimTranscript = '';
         
+        // VAD (Voice Activity Detection) variables
+        let audioContext = null;
+        let analyser = null;
+        let microphone = null;
+        let vadInterval = null;
+        let isSpeaking = false;
+        let speechTimer = null;
+        let lastSpeechTime = 0;
+        
+        // CPU-based VAD using Web Audio API
+        async function initializeVAD() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                microphone = audioContext.createMediaStreamSource(stream);
+                
+                analyser.fftSize = 512;
+                analyser.smoothingTimeConstant = 0.8;
+                microphone.connect(analyser);
+                
+                return true;
+            } catch (error) {
+                console.error('VAD initialization failed:', error);
+                return false;
+            }
+        }
+
+        function getAudioLevel() {
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+            analyser.getByteFrequencyData(dataArray);
+            
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+                sum += dataArray[i];
+            }
+            return sum / dataArray.length / 255; // Normalize to 0-1
+        }
+
+        function startVAD() {
+            if (!config.vadEnabled || !analyser) return;
+            
+            vadInterval = setInterval(() => {
+                const audioLevel = getAudioLevel();
+                const currentTime = Date.now();
+                
+                if (audioLevel > config.silenceThreshold) {
+                    if (!isSpeaking) {
+                        isSpeaking = true;
+                        // Speech started - wait a bit before starting recognition
+                        setTimeout(() => {
+                            if (isSpeaking && isTranscribing) {
+                                startSpeechRecognition();
+                            }
+                        }, 200);
+                    }
+                    lastSpeechTime = currentTime;
+                    
+                    // Clear any existing speech timeout
+                    if (speechTimer) {
+                        clearTimeout(speechTimer);
+                        speechTimer = null;
+                    }
+                } else {
+                    // Check if we've been silent long enough
+                    if (isSpeaking && (currentTime - lastSpeechTime > config.speechTimeout)) {
+                        isSpeaking = false;
+                        stopSpeechRecognition();
+                    }
+                }
+            }, 100);
+        }
+
+        function stopVAD() {
+            if (vadInterval) {
+                clearInterval(vadInterval);
+                vadInterval = null;
+            }
+            if (speechTimer) {
+                clearTimeout(speechTimer);
+                speechTimer = null;
+            }
+            isSpeaking = false;
+        }
+
+        function startSpeechRecognition() {
+            if (!recognition || recognition.isRecognizing) return;
+            
+            try {
+                recognition.start();
+                recognition.isRecognizing = true;
+            } catch (error) {
+                console.error('Speech recognition start error:', error);
+            }
+        }
+
+        function stopSpeechRecognition() {
+            if (recognition && recognition.isRecognizing) {
+                recognition.stop();
+                recognition.isRecognizing = false;
+            }
+        }
+
         function initializeRecognition() {
             recognition = new SpeechRecognition();
-            recognition.continuous = true;
+            recognition.continuous = false; // Changed to false for VAD control
             recognition.interimResults = true;
             recognition.maxAlternatives = 1;
-            recognition.lang = document.getElementById('language-selector').value;
+            recognition.lang = config.userLanguage;
+            recognition.isRecognizing = false;
             
             recognition.onstart = () => {
                 updateStatus('Transcription active', 'active');
@@ -599,22 +844,12 @@
             };
             
             recognition.onend = () => {
-                if (isTranscribing) {
-                    // Auto-restart
-                    setTimeout(() => {
-                        if (isTranscribing) {
-                            try {
-                                recognition.start();
-                                updateStatus('Transcription restarted', 'active');
-                            } catch (e) {
-                                console.error('Failed to restart:', e);
-                            }
-                        }
-                    }, 500);
-                } else {
+                recognition.isRecognizing = false;
+                if (!isTranscribing) {
                     updateStatus('Transcription stopped', 'inactive');
                     document.getElementById('captions-container').classList.add('hidden');
                 }
+                // VAD will handle restarting when speech is detected
             };
         }
         
@@ -767,30 +1002,70 @@
             }
         }
         
-        // Event Listeners
-        document.getElementById('startTranscription').addEventListener('click', () => {
+        // Language Setup Modal
+        document.getElementById('save-language-settings').addEventListener('click', async () => {
+            config.userLanguage = document.getElementById('modal-my-language').value;
+            config.targetLanguage = document.getElementById('modal-target-language').value;
+            config.languageSetupComplete = true;
+            
+            // Update UI selectors
+            document.getElementById('language-selector').value = config.userLanguage;
+            document.getElementById('target-language-selector').value = config.targetLanguage;
+            
+            // Hide modal and save settings
+            document.getElementById('language-setup-modal').classList.add('hidden');
+            saveLanguageSettings();
+            
+            // Initialize VAD and auto-start
+            const vadInitialized = await initializeVAD();
+            if (vadInitialized) {
+                // Auto-enable TTS and start transcription
+                config.ttsEnabled = true;
+                document.getElementById('toggleTTS').textContent = 'Disable TTS';
+                document.getElementById('toggleTTS').classList.add('active');
+                
+                // Start transcription automatically
+                startTranscription();
+            }
+            
+            updateStatus('Language setup complete - Ready to translate!', 'active');
+        });
+
+        // Enhanced transcription start function
+        async function startTranscription() {
             if (!isTranscribing) {
                 isTranscribing = true;
                 finalTranscript = '';
                 interimTranscript = '';
                 
+                // Initialize VAD if not already done
+                if (!audioContext) {
+                    await initializeVAD();
+                }
+                
                 initializeRecognition();
-                recognition.start();
+                startVAD();
                 
                 document.getElementById('startTranscription').disabled = true;
                 document.getElementById('stopTranscription').disabled = false;
+                
+                updateStatus('Listening with VAD...', 'active');
             }
-        });
+        }
+
+        // Event Listeners
+        document.getElementById('startTranscription').addEventListener('click', startTranscription);
         
         document.getElementById('stopTranscription').addEventListener('click', () => {
             if (isTranscribing) {
                 isTranscribing = false;
-                if (recognition) {
-                    recognition.stop();
-                }
+                stopVAD();
+                stopSpeechRecognition();
                 
                 document.getElementById('startTranscription').disabled = false;
                 document.getElementById('stopTranscription').disabled = true;
+                
+                updateStatus('Transcription stopped', 'inactive');
             }
         });
         
@@ -826,10 +1101,9 @@
         document.getElementById('language-selector').addEventListener('change', () => {
             config.userLanguage = document.getElementById('language-selector').value;
             if (recognition && isTranscribing) {
-                recognition.stop();
+                stopSpeechRecognition();
                 setTimeout(() => {
                     initializeRecognition();
-                    recognition.start();
                 }, 500);
             }
             loadVoices();
@@ -916,13 +1190,51 @@
             }
         });
         
+        // Check if language setup was already completed
+        function checkLanguageSetup() {
+            const savedSettings = localStorage.getItem('jitsi-translation-settings');
+            if (savedSettings) {
+                try {
+                    const settings = JSON.parse(savedSettings);
+                    config.userLanguage = settings.userLanguage;
+                    config.targetLanguage = settings.targetLanguage;
+                    config.languageSetupComplete = true;
+                    config.selectedVoiceId = settings.selectedVoiceId || config.selectedVoiceId;
+                    
+                    // Update UI
+                    document.getElementById('modal-my-language').value = config.userLanguage;
+                    document.getElementById('modal-target-language').value = config.targetLanguage;
+                    document.getElementById('language-selector').value = config.userLanguage;
+                    document.getElementById('target-language-selector').value = config.targetLanguage;
+                    
+                    // Hide modal
+                    document.getElementById('language-setup-modal').classList.add('hidden');
+                    
+                    return true;
+                } catch (error) {
+                    console.error('Error loading language settings:', error);
+                }
+            }
+            return false;
+        }
+
+        function saveLanguageSettings() {
+            const settings = {
+                userLanguage: config.userLanguage,
+                targetLanguage: config.targetLanguage,
+                selectedVoiceId: config.selectedVoiceId
+            };
+            localStorage.setItem('jitsi-translation-settings', JSON.stringify(settings));
+        }
+
+        // Initialize on page load
+        const settingsLoaded = checkLanguageSetup();
+        if (settingsLoaded) {
+            updateStatus(`Languages: ${config.userLanguage} → ${config.targetLanguage}`, 'inactive');
+        }
+
         // Show room name for sharing
         console.log(`Share this room name to invite others: ${config.roomName}`);
-        
-        // Add room info to status
-        setTimeout(() => {
-            updateStatus(`Room: ${config.roomName} | Ready`, 'inactive');
-        }, 2000);
     </script>
 </body>
 </html>
