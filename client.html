@@ -592,12 +592,16 @@
 
         // Listen for TTS generation request
         socket.on('generate-tts', (data) => {
-            if (config.ttsEnabled && config.selectedVoiceId) {
+            // IMPORTANT: Only generate TTS for OTHER people's speech, not my own!
+            if (config.ttsEnabled && config.selectedVoiceId && data.fromUserId !== config.userId) {
+                console.log(`🎧 Generating TTS for other user's speech: ${data.fromUserId}`);
                 // Request TTS generation with my preferred voice
                 socket.emit('generate-tts-for-me', {
                     text: data.translatedText,
                     voiceId: config.selectedVoiceId
                 });
+            } else if (data.fromUserId === config.userId) {
+                console.log(`🔇 Skipping TTS for my own speech (${data.fromUserId})`);
             }
         });
 
@@ -648,6 +652,7 @@
         let originalJitsiVolume = 1.0;
         let isAudioDucked = false;
         let jitsiAudioElements = [];
+        let duckingReason = null; // 'speaking', 'tts', or null
 
         // Audio ducking functions
         function findJitsiAudioElements() {
@@ -683,21 +688,36 @@
             return audioElements.filter(el => el && !el.muted);
         }
 
-        function duckJitsiAudio(duckLevel = 0.05) {
-            if (isAudioDucked) return;
+        function duckJitsiAudio(duckLevel = 0.05, reason = 'unknown') {
+            // If already ducked with higher priority, don't change
+            if (isAudioDucked && duckingReason === 'tts' && reason === 'speaking') {
+                return;
+            }
+            
+            // If switching reasons, restore first
+            if (isAudioDucked && duckingReason !== reason) {
+                restoreJitsiAudio();
+            }
             
             jitsiAudioElements = findJitsiAudioElements();
             
             jitsiAudioElements.forEach(audioEl => {
                 if (audioEl.volume !== undefined) {
-                    // Store original volume
-                    audioEl.originalVolume = audioEl.volume;
+                    // Store original volume if not already stored
+                    if (!audioEl.originalVolume) {
+                        audioEl.originalVolume = audioEl.volume;
+                    }
                     // Duck the audio
                     audioEl.volume = duckLevel;
                 }
             });
             
             // More aggressive approach: Add CSS to lower volume of all audio/video elements
+            const existingStyle = document.getElementById('audio-duck-style');
+            if (existingStyle) {
+                existingStyle.remove();
+            }
+            
             const style = document.createElement('style');
             style.id = 'audio-duck-style';
             style.textContent = `
@@ -712,14 +732,14 @@
             
             // Try Jitsi API commands
             try {
-                // Lower all participant volumes
                 api.executeCommand('setParticipantVolume', null, duckLevel);
             } catch (error) {
                 console.log('Could not use Jitsi API for participant volume');
             }
             
             isAudioDucked = true;
-            console.log(`Audio ducked to ${duckLevel * 100}%`);
+            duckingReason = reason;
+            console.log(`Audio ducked to ${duckLevel * 100}% (reason: ${reason})`);
         }
 
         function restoreJitsiAudio() {
@@ -740,12 +760,13 @@
             
             // Restore Jitsi API settings
             try {
-                api.executeCommand('setParticipantVolume', null, 1.0); // Restore to full volume
+                api.executeCommand('setParticipantVolume', null, 1.0);
             } catch (error) {
                 console.log('Could not restore Jitsi API participant volume');
             }
             
             isAudioDucked = false;
+            duckingReason = null;
             console.log('Audio restored to normal levels');
         }
 
@@ -839,6 +860,11 @@
                 if (audioLevel > config.silenceThreshold) {
                     if (!isSpeaking) {
                         isSpeaking = true;
+                        console.log('🎤 User started speaking - ducking Jitsi audio for own voice');
+                        
+                        // Duck Jitsi audio when user starts speaking to prevent echo/feedback
+                        duckJitsiAudio(0.3, 'speaking'); // Less aggressive ducking for own speech
+                        
                         // Speech started - wait a bit before starting recognition
                         setTimeout(() => {
                             if (isSpeaking && isTranscribing) {
@@ -857,6 +883,10 @@
                     // Check if we've been silent long enough
                     if (isSpeaking && (currentTime - lastSpeechTime > config.speechTimeout)) {
                         isSpeaking = false;
+                        console.log('🔇 User stopped speaking - restoring Jitsi audio');
+                        
+                        // Restore Jitsi audio when user stops speaking
+                        restoreJitsiAudio();
                         stopSpeechRecognition();
                     }
                 }
@@ -1116,8 +1146,8 @@
                 
                 // Duck Jitsi audio when TTS starts playing
                 audio.addEventListener('play', () => {
-                    console.log('TTS started - ducking Jitsi audio');
-                    duckJitsiAudio(0.05); // Lower to 5% volume
+                    console.log('🎧 TTS translation started - aggressive ducking');
+                    duckJitsiAudio(0.02, 'tts'); // Very aggressive ducking for translation (2%)
                 });
                 
                 // Restore Jitsi audio when TTS ends
