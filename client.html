@@ -288,9 +288,9 @@
         socket.on('translated-message', (data) => {
             displayTranslatedMessage(data.originalText, data.translatedText, data.fromLanguage, data.toLanguage);
             
-            // TTS for translated text
-            if (config.ttsEnabled) {
-                speak(data.translatedText);
+            // Play ElevenLabs TTS audio if available
+            if (data.audioBuffer && config.ttsEnabled) {
+                playTTSAudio(data.audioBuffer);
             }
         });
         
@@ -537,6 +537,38 @@
             utterance.volume = 0.8;
             
             synth.speak(utterance);
+        }
+
+        function playTTSAudio(base64Audio) {
+            try {
+                // Convert base64 to blob
+                const audioData = atob(base64Audio);
+                const arrayBuffer = new ArrayBuffer(audioData.length);
+                const view = new Uint8Array(arrayBuffer);
+                
+                for (let i = 0; i < audioData.length; i++) {
+                    view[i] = audioData.charCodeAt(i);
+                }
+                
+                const audioBlob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
+                const audioUrl = URL.createObjectURL(audioBlob);
+                const audio = new Audio(audioUrl);
+                
+                audio.volume = 0.8;
+                audio.play().then(() => {
+                    console.log('Playing ElevenLabs TTS audio');
+                }).catch(error => {
+                    console.error('Failed to play TTS audio:', error);
+                });
+
+                // Clean up URL after audio ends
+                audio.addEventListener('ended', () => {
+                    URL.revokeObjectURL(audioUrl);
+                });
+                
+            } catch (error) {
+                console.error('Error playing TTS audio:', error);
+            }
         }
         
         // Event Listeners

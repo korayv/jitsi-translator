@@ -8,6 +8,7 @@
     "dev": "nodemon server.js"
   },
   "dependencies": {
+    "elevenlabs": "^1.59.0",
     "@google-cloud/translate": "^8.0.2",
     "dotenv": "^16.6.1",
     "express": "^4.18.2",
@@ -22,6 +23,10 @@
     "real-time",
     "websocket"
   ],
-  "author": "Your Name",
+  "author": "Koray Vatan",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/korayv/jitsi-translator"
+  },
   "license": "MIT"
 }

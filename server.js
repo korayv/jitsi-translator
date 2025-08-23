@@ -1,3 +1,4 @@
+const { ElevenLabsClient } = require("elevenlabs");
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -20,6 +21,11 @@ const translate = new Translate({
     keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS
 });
 
+// ElevenLabs setup
+const elevenlabs = new ElevenLabsClient({
+    apiKey: process.env.ELEVENLABS_API_KEY
+});
+
 // Çeviri fonksiyonu
 async function translateText(text, fromLang, toLang) {
     try {
@@ -31,6 +37,27 @@ async function translateText(text, fromLang, toLang) {
         return translation;
     } catch (error) {
         console.error('Google Translate error:', error);
+        throw error;
+    }
+}
+
+// TTS fonksiyonu
+async function generateTTS(text, voiceId = 'pNInz6obpgDQGcFmaJgB') {
+    try {
+        const audio = await elevenlabs.textToSpeech.convert(voiceId, {
+            text: text,
+            modelId: 'eleven_multilingual_v2'
+        });
+
+        const chunks = [];
+        
+        for await (const chunk of audio) {
+            chunks.push(chunk);
+        }
+        
+        return Buffer.concat(chunks);
+    } catch (error) {
+        console.error('ElevenLabs TTS error:', error);
         throw error;
     }
 }
@@ -89,14 +116,24 @@ io.on('connection', (socket) => {
             
             console.log(`Translated to ${toLanguage}: ${translatedText}`);
 
-            // Odadaki diğer kullanıcılara çeviriyi gönder
+            // TTS audio oluştur
+            let audioBuffer = null;
+            try {
+                audioBuffer = await generateTTS(translatedText);
+                console.log(`Generated TTS audio for: ${translatedText}`);
+            } catch (ttsError) {
+                console.error('TTS generation failed:', ttsError);
+            }
+
+            // Odadaki diğer kullanıcılara çeviriyi ve audioyu gönder
             socket.to(roomName).emit('translated-message', {
                 originalText: text,
                 translatedText: translatedText,
                 fromLanguage: fromLanguage,
                 toLanguage: toLanguage,
                 fromUserId: userId,
-                timestamp: new Date()
+                timestamp: new Date(),
+                audioBuffer: audioBuffer ? audioBuffer.toString('base64') : null
             });
 
         } catch (error) {
