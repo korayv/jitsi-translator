@@ -46,12 +46,11 @@ async function generateTTS(text, voiceId = 'pNInz6obpgDQGcFmaJgB') {
     try {
         const audio = await elevenlabs.textToSpeech.convert(voiceId, {
             text: text,
-            modelId: 'eleven_turbo_v2', // Faster model
-            outputFormat: 'mp3_22050_32' // Lower quality for speed
+            modelId: 'eleven_turbo_v2',
+            outputFormat: 'mp3_22050_32'
         });
 
         const chunks = [];
-        
         for await (const chunk of audio) {
             chunks.push(chunk);
         }
@@ -78,12 +77,13 @@ io.on('connection', (socket) => {
 
     // Odaya katılma
     socket.on('join-room', (data) => {
-        const { roomName, userId, language } = data;
+        const { roomName, userId, language, selectedVoiceId } = data;
         
         socket.join(roomName);
         socket.userId = userId;
         socket.roomName = roomName;
         socket.language = language;
+        socket.selectedVoiceId = selectedVoiceId || 'pNInz6obpgDQGcFmaJgB';
 
         // Oda bilgisini güncelle
         if (!rooms.has(roomName)) {
@@ -128,16 +128,11 @@ io.on('connection', (socket) => {
                 audioBuffer: null // Send text first
             });
 
-            // Generate TTS in background and send separately
-            generateTTS(translatedText).then(audioBuffer => {
-                socket.to(roomName).emit('tts-audio', {
-                    audioBuffer: audioBuffer.toString('base64'),
-                    translatedText: translatedText,
-                    fromUserId: userId
-                });
-                console.log(`Generated TTS audio for: ${translatedText}`);
-            }).catch(ttsError => {
-                console.error('TTS generation failed:', ttsError);
+            // Send translated text to all clients - let each client generate TTS with their preferred voice
+            socket.to(roomName).emit('generate-tts', {
+                translatedText: translatedText,
+                fromUserId: userId,
+                timestamp: new Date()
             });
 
         } catch (error) {
@@ -166,6 +161,30 @@ io.on('connection', (socket) => {
             socket.to(socket.roomName).emit('user-left', {
                 userId: socket.userId
             });
+        }
+    });
+
+    // Get available voices
+    socket.on('get-voices', async () => {
+        try {
+            const voices = await elevenlabs.voices.getAll();
+            socket.emit('voices-list', voices.voices);
+        } catch (error) {
+            console.error('Error fetching voices:', error);
+            socket.emit('voices-error', { error: error.message });
+        }
+    });
+
+    // Generate TTS for specific client
+    socket.on('generate-tts-for-me', async (data) => {
+        try {
+            const audioBuffer = await generateTTS(data.text, data.voiceId);
+            socket.emit('tts-audio', {
+                audioBuffer: audioBuffer.toString('base64'),
+                translatedText: data.text
+            });
+        } catch (error) {
+            console.error('TTS generation failed:', error);
         }
     });
 });

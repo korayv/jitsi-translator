@@ -20,36 +20,159 @@
             position: fixed;
             top: 20px;
             right: 20px;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 15px;
-            border-radius: 10px;
+            background: rgba(32, 32, 32, 0.95);
+            padding: 20px;
+            border-radius: 12px;
             color: white;
             z-index: 1000;
-            backdrop-filter: blur(10px);
+            backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            width: 320px;
+            transition: all 0.3s ease;
+            transform: translateX(0);
+        }
+
+        #controls.hidden {
+            transform: translateX(calc(100% + 20px));
+        }
+
+        #controls-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(32, 32, 32, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 1001;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+            transition: all 0.3s ease;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #controls-toggle.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #controls-toggle:hover {
+            background: rgba(52, 52, 52, 0.95);
+            transform: scale(1.05);
+        }
+
+        #controls-toggle svg {
+            width: 20px;
+            height: 20px;
+            fill: white;
         }
         
         #controls button {
-            background: #0056ff;
+            background: #166ff4;
             color: white;
             border: none;
-            padding: 8px 16px;
-            border-radius: 5px;
-            margin: 5px;
+            padding: 10px 16px;
+            border-radius: 8px;
+            margin: 6px 4px;
             cursor: pointer;
-            transition: background 0.3s;
+            transition: all 0.2s ease;
+            font-size: 14px;
+            font-weight: 500;
         }
         
         #controls button:hover {
-            background: #0045d4;
+            background: #0f5ad1;
+            transform: translateY(-1px);
         }
         
         #controls button.active {
-            background: #00a86b;
+            background: #36b37e;
         }
         
         #controls button:disabled {
-            background: #666;
+            background: #5a5a5a;
             cursor: not-allowed;
+            transform: none;
+        }
+
+        .control-group {
+            margin: 16px 0;
+            padding: 0;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #b8bcc8;
+        }
+
+        .control-group select {
+            width: 100%;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            color: white;
+            font-size: 14px;
+        }
+
+        .control-group select option {
+            background: #2d2d2d;
+            color: white;
+        }
+
+        .button-row {
+            display: flex;
+            gap: 8px;
+            margin: 12px 0;
+        }
+
+        .button-row button {
+            flex: 1;
+            margin: 0;
+        }
+
+        #controls-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        #controls-header h3 {
+            margin: 0;
+            font-size: 18px;
+            color: white;
+        }
+
+        #hide-controls {
+            background: transparent;
+            border: none;
+            color: #b8bcc8;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+
+        #hide-controls:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        #hide-controls svg {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
         }
         
         #captions-container {
@@ -188,15 +311,35 @@
         <span class="status-indicator inactive" id="statusIndicator"></span>
         <span id="statusText">Initializing...</span>
     </div>
+
+    <!-- Toggle button to show controls when hidden -->
+    <div id="controls-toggle">
+        <svg viewBox="0 0 24 24">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+        </svg>
+    </div>
     
     <div id="controls">
-        <h3 style="margin-top: 0;">Transcription Controls</h3>
-        <button id="startTranscription">Start Transcription</button>
-        <button id="stopTranscription" disabled>Stop Transcription</button>
-        <button id="clearTranscripts">Clear</button>
-        <button id="downloadTranscripts">Download</button>
+        <div id="controls-header">
+            <h3>Transcription Controls</h3>
+            <button id="hide-controls" title="Hide controls">
+                <svg viewBox="0 0 24 24">
+                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                </svg>
+            </button>
+        </div>
         
-        <div style="margin-top: 10px;">
+        <div class="button-row">
+            <button id="startTranscription">Start Transcription</button>
+            <button id="stopTranscription" disabled>Stop Transcription</button>
+        </div>
+        
+        <div class="button-row">
+            <button id="clearTranscripts">Clear</button>
+            <button id="downloadTranscripts">Download</button>
+        </div>
+        
+        <div class="control-group">
             <label>My Language:</label>
             <select id="language-selector">
                 <option value="tr-TR">Türkçe</option>
@@ -216,7 +359,7 @@
             </select>
         </div>
         
-        <div style="margin-top: 10px;">
+        <div class="control-group">
             <label>Target Language:</label>
             <select id="target-language-selector">
                 <option value="en-US">English (US)</option>
@@ -236,18 +379,25 @@
             </select>
         </div>
         
-        <div id="tts-controls">
-            <h4 style="margin-top: 0;">Text-to-Speech</h4>
-            <button id="toggleTTS">Enable TTS</button>
-            <div style="margin-top: 10px;">
-                <label>Voice:</label>
+        <div style="border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 16px; margin-top: 16px;">
+            <h4 style="margin: 0 0 16px 0; font-size: 16px; color: white;">Text-to-Speech</h4>
+            <button id="toggleTTS" style="width: 100%; margin-bottom: 16px;">Enable TTS</button>
+            
+            <div class="control-group">
+                <label>ElevenLabs Voice:</label>
+                <select id="elevenlabs-voice-selector">
+                    <option value="">Loading voices...</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label>Browser Voice:</label>
                 <select id="tts-voice-selector">
                     <!-- Will be populated dynamically -->
                 </select>
             </div>
-            <div style="margin-top: 10px;">
-                <button id="testTTS">Test TTS</button>
-            </div>
+            
+            <button id="testTTS" style="width: 100%;">Test TTS</button>
         </div>
     </div>
     
@@ -269,7 +419,9 @@
             selectedVoice: null,
             userLanguage: 'tr-TR', // Kullanıcının ana dili (Türkçe)
             targetLanguage: 'en-US', // Hedef dil (İngilizce)
-            userId: Math.random().toString(36).substring(7)
+            userId: Math.random().toString(36).substring(7),
+            selectedVoiceId: 'pNInz6obpgDQGcFmaJgB', // Default ElevenLabs voice
+            elevenLabsVoices: []
         };
 
         // Socket.IO connection
@@ -280,8 +432,11 @@
             socket.emit('join-room', {
                 roomName: config.roomName,
                 userId: config.userId,
-                language: config.userLanguage
+                language: config.userLanguage,
+                selectedVoiceId: config.selectedVoiceId
             });
+            // Request available voices
+            socket.emit('get-voices');
         });
 
         // Listen for translated messages from other users
@@ -294,11 +449,33 @@
             }
         });
 
-        // Listen for TTS audio separately (faster delivery)
+        // Listen for TTS generation request
+        socket.on('generate-tts', (data) => {
+            if (config.ttsEnabled && config.selectedVoiceId) {
+                // Request TTS generation with my preferred voice
+                socket.emit('generate-tts-for-me', {
+                    text: data.translatedText,
+                    voiceId: config.selectedVoiceId
+                });
+            }
+        });
+
+        // Listen for TTS audio response
         socket.on('tts-audio', (data) => {
             if (config.ttsEnabled && data.audioBuffer) {
                 playTTSAudio(data.audioBuffer);
             }
+        });
+
+        // Listen for ElevenLabs voices list
+        socket.on('voices-list', (voices) => {
+            config.elevenLabsVoices = voices;
+            populateElevenLabsVoices(voices);
+        });
+
+        socket.on('voices-error', (error) => {
+            console.error('Failed to load ElevenLabs voices:', error);
+            document.getElementById('elevenlabs-voice-selector').innerHTML = '<option value="">Failed to load voices</option>';
         });
         
         // Initialize Jitsi Meet
@@ -524,6 +701,21 @@
             synth.onvoiceschanged = loadVoices;
         }
         loadVoices();
+
+        function populateElevenLabsVoices(voices) {
+            const selector = document.getElementById('elevenlabs-voice-selector');
+            selector.innerHTML = '';
+            
+            voices.forEach(voice => {
+                const option = document.createElement('option');
+                option.value = voice.voice_id;
+                option.textContent = `${voice.name} (${voice.labels?.accent || 'Unknown'})`;
+                if (voice.voice_id === config.selectedVoiceId) {
+                    option.selected = true;
+                }
+                selector.appendChild(option);
+            });
+        }
         
         function speak(text) {
             if (!config.ttsEnabled || !text.trim()) return;
@@ -548,7 +740,6 @@
 
         function playTTSAudio(base64Audio) {
             try {
-                // Convert base64 to blob
                 const audioData = atob(base64Audio);
                 const arrayBuffer = new ArrayBuffer(audioData.length);
                 const view = new Uint8Array(arrayBuffer);
@@ -562,15 +753,13 @@
                 const audio = new Audio(audioUrl);
                 
                 audio.volume = 0.8;
-                audio.play().then(() => {
-                    console.log('Playing ElevenLabs TTS audio');
-                }).catch(error => {
-                    console.error('Failed to play TTS audio:', error);
-                });
-
-                // Clean up URL after audio ends
+                
                 audio.addEventListener('ended', () => {
                     URL.revokeObjectURL(audioUrl);
+                });
+                
+                audio.play().catch(error => {
+                    console.error('Failed to play TTS audio:', error);
                 });
                 
             } catch (error) {
@@ -656,10 +845,56 @@
             e.target.classList.toggle('active', config.ttsEnabled);
         });
         
+        document.getElementById('elevenlabs-voice-selector').addEventListener('change', (e) => {
+            config.selectedVoiceId = e.target.value;
+            console.log('Selected ElevenLabs voice:', config.selectedVoiceId);
+        });
+
         document.getElementById('testTTS').addEventListener('click', () => {
             const testText = 'This is a test of the text to speech system.';
             speak(testText);
         });
+
+        // Controls show/hide functionality
+        document.getElementById('hide-controls').addEventListener('click', () => {
+            document.getElementById('controls').classList.add('hidden');
+            document.getElementById('controls-toggle').classList.add('visible');
+        });
+
+        document.getElementById('controls-toggle').addEventListener('click', () => {
+            document.getElementById('controls').classList.remove('hidden');
+            document.getElementById('controls-toggle').classList.remove('visible');
+        });
+
+        // Auto-hide on mobile or small screens
+        function checkScreenSize() {
+            if (window.innerWidth < 768) {
+                // Auto-hide on mobile
+                setTimeout(() => {
+                    if (!document.getElementById('controls').classList.contains('hidden')) {
+                        document.getElementById('hide-controls').click();
+                    }
+                }, 5000); // Hide after 5 seconds on mobile
+            }
+        }
+
+        // Check screen size on load and resize
+        checkScreenSize();
+        window.addEventListener('resize', checkScreenSize);
+
+        // Optional: Hide when clicking outside (uncomment if desired)
+        /*
+        document.addEventListener('click', (e) => {
+            const controls = document.getElementById('controls');
+            const toggle = document.getElementById('controls-toggle');
+            
+            if (!controls.contains(e.target) && !toggle.contains(e.target)) {
+                if (!controls.classList.contains('hidden')) {
+                    document.getElementById('hide-controls').click();
+                }
+            }
+        });
+        */
         
         // Jitsi API Events
         api.addEventListener('videoConferenceJoined', () => {
