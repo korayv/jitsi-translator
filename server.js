@@ -41,12 +41,13 @@ async function translateText(text, fromLang, toLang) {
     }
 }
 
-// TTS fonksiyonu
+// TTS fonksiyonu with streaming optimization
 async function generateTTS(text, voiceId = 'pNInz6obpgDQGcFmaJgB') {
     try {
         const audio = await elevenlabs.textToSpeech.convert(voiceId, {
             text: text,
-            modelId: 'eleven_multilingual_v2'
+            modelId: 'eleven_turbo_v2', // Faster model
+            outputFormat: 'mp3_22050_32' // Lower quality for speed
         });
 
         const chunks = [];
@@ -116,16 +117,7 @@ io.on('connection', (socket) => {
             
             console.log(`Translated to ${toLanguage}: ${translatedText}`);
 
-            // TTS audio oluştur
-            let audioBuffer = null;
-            try {
-                audioBuffer = await generateTTS(translatedText);
-                console.log(`Generated TTS audio for: ${translatedText}`);
-            } catch (ttsError) {
-                console.error('TTS generation failed:', ttsError);
-            }
-
-            // Odadaki diğer kullanıcılara çeviriyi ve audioyu gönder
+            // Send text immediately, generate TTS in parallel
             socket.to(roomName).emit('translated-message', {
                 originalText: text,
                 translatedText: translatedText,
@@ -133,7 +125,19 @@ io.on('connection', (socket) => {
                 toLanguage: toLanguage,
                 fromUserId: userId,
                 timestamp: new Date(),
-                audioBuffer: audioBuffer ? audioBuffer.toString('base64') : null
+                audioBuffer: null // Send text first
+            });
+
+            // Generate TTS in background and send separately
+            generateTTS(translatedText).then(audioBuffer => {
+                socket.to(roomName).emit('tts-audio', {
+                    audioBuffer: audioBuffer.toString('base64'),
+                    translatedText: translatedText,
+                    fromUserId: userId
+                });
+                console.log(`Generated TTS audio for: ${translatedText}`);
+            }).catch(ttsError => {
+                console.error('TTS generation failed:', ttsError);
             });
 
         } catch (error) {

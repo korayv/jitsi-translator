@@ -288,8 +288,15 @@
         socket.on('translated-message', (data) => {
             displayTranslatedMessage(data.originalText, data.translatedText, data.fromLanguage, data.toLanguage);
             
-            // Play ElevenLabs TTS audio if available
+            // Play ElevenLabs TTS audio if available (fallback)
             if (data.audioBuffer && config.ttsEnabled) {
+                playTTSAudio(data.audioBuffer);
+            }
+        });
+
+        // Listen for TTS audio separately (faster delivery)
+        socket.on('tts-audio', (data) => {
+            if (config.ttsEnabled && data.audioBuffer) {
                 playTTSAudio(data.audioBuffer);
             }
         });
