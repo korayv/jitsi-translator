@@ -8,11 +8,10 @@ const app = express();
 // Google Translate setup
 let translate;
 try {
-    if (process.env.GOOGLE_CLOUD_PROJECT_ID && process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-        const credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+    if (process.env.GOOGLE_CLOUD_PROJECT_ID && process.env.GOOGLE_API_KEY) {
         translate = new Translate({
             projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
-            credentials: credentials
+            key: process.env.GOOGLE_API_KEY
         });
     }
 } catch (error) {

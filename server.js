@@ -20,7 +20,7 @@ const io = socketIo(server, {
 // Google Translate setup
 const translate = new Translate({
     projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
-    keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS
+    key: process.env.GOOGLE_API_KEY
 });
 
 // ElevenLabs setup
