@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jitsi Meet with Live Translation</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: white;
+        }
+        
+        #meet {
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(32, 32, 32, 0.95);
+            padding: 20px;
+            border-radius: 12px;
+            color: white;
+            z-index: 1000;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            width: 320px;
+        }
+        
+        #controls button {
+            background: #166ff4;
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 8px;
+            margin: 6px 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        #controls button:hover {
+            background: #0f5ad1;
+        }
+        
+        #controls button.active {
+            background: #36b37e;
+        }
+        
+        .control-group {
+            margin: 16px 0;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #b8bcc8;
+        }
+        
+        .control-group select {
+            width: 100%;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            color: white;
+            font-size: 14px;
+        }
+
+        #captions-container {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            max-width: 800px;
+            background: rgba(0, 0, 0, 0.85);
+            border-radius: 10px;
+            padding: 20px;
+            z-index: 999;
+            backdrop-filter: blur(10px);
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .caption-line {
+            color: white;
+            font-size: 18px;
+            line-height: 1.5;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="meet"></div>
+    
+    <div id="controls">
+        <h3 style="margin-top: 0;">Translation Controls</h3>
+        
+        <div class="control-group">
+            <label>My Language:</label>
+            <select id="language-selector">
+                <option value="tr-TR">Türkçe</option>
+                <option value="en-US">English (US)</option>
+                <option value="en-GB">English (UK)</option>
+                <option value="es-ES">Spanish</option>
+                <option value="fr-FR">French</option>
+                <option value="de-DE">German</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <label>Target Language:</label>
+            <select id="target-language-selector">
+                <option value="en-US">English (US)</option>
+                <option value="tr-TR">Türkçe</option>
+                <option value="en-GB">English (UK)</option>
+                <option value="es-ES">Spanish</option>
+                <option value="fr-FR">French</option>
+                <option value="de-DE">German</option>
+            </select>
+        </div>
+        
+        <button id="startTranscription">Start Translation</button>
+        <button id="testTranslation">Test Translation</button>
+    </div>
+    
+    <div id="captions-container" style="display: none;">
+        <div id="captions"></div>
+    </div>
+
+    <script src="https://meet.jit.si/external_api.js"></script>
+    <script>
+        // Configuration
+        const config = {
+            roomName: 'TestTranslationRoom',
+            userLanguage: 'tr-TR',
+            targetLanguage: 'en-US',
+            isTranscribing: false
+        };
+
+        // Initialize Jitsi Meet
+        const api = new JitsiMeetExternalAPI("meet.jit.si", {
+            roomName: config.roomName,
+            parentNode: document.querySelector("#meet"),
+            width: '100%',
+            height: '100%',
+            configOverwrite: { 
+                prejoinPageEnabled: false,
+                startWithAudioMuted: false,
+                startWithVideoMuted: false
+            }
+        });
+
+        // Speech Recognition Setup
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition = null;
+
+        function initializeRecognition() {
+            if (!SpeechRecognition) {
+                alert('Speech recognition not supported in this browser');
+                return;
+            }
+
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = config.userLanguage;
+
+            recognition.onresult = async (event) => {
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    
+                    if (event.results[i].isFinal) {
+                        await translateAndDisplay(transcript);
+                    }
+                }
+            };
+
+            recognition.onerror = (event) => {
+                console.error('Speech recognition error:', event.error);
+            };
+
+            recognition.onend = () => {
+                if (config.isTranscribing) {
+                    setTimeout(() => {
+                        if (config.isTranscribing) {
+                            recognition.start();
+                        }
+                    }, 1000);
+                }
+            };
+        }
+
+        // Translation function
+        async function translateAndDisplay(text) {
+            try {
+                const response = await fetch('/api/translate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        fromLanguage: config.userLanguage,
+                        toLanguage: config.targetLanguage
+                    })
+                });
+
+                const data = await response.json();
+                displayTranslation(text, data.translatedText);
+                
+                // Generate and play TTS
+                await generateAndPlayTTS(data.translatedText);
+                
+            } catch (error) {
+                console.error('Translation error:', error);
+            }
+        }
+
+        // TTS function
+        async function generateAndPlayTTS(text) {
+            try {
+                const response = await fetch('/api/tts', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        voiceId: 'pNInz6obpgDQGcFmaJgB'
+                    })
+                });
+
+                const data = await response.json();
+                playTTSAudio(data.audioBuffer);
+                
+            } catch (error) {
+                console.error('TTS error:', error);
+            }
+        }
+
+        function playTTSAudio(base64Audio) {
+            try {
+                const audioData = atob(base64Audio);
+                const arrayBuffer = new ArrayBuffer(audioData.length);
+                const view = new Uint8Array(arrayBuffer);
+                
+                for (let i = 0; i < audioData.length; i++) {
+                    view[i] = audioData.charCodeAt(i);
+                }
+                
+                const audioBlob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
+                const audioUrl = URL.createObjectURL(audioBlob);
+                const audio = new Audio(audioUrl);
+                
+                audio.volume = 0.8;
+                audio.play();
+                
+                audio.addEventListener('ended', () => {
+                    URL.revokeObjectURL(audioUrl);
+                });
+                
+            } catch (error) {
+                console.error('Error playing TTS audio:', error);
+            }
+        }
+
+        function displayTranslation(original, translated) {
+            const captionsDiv = document.getElementById('captions');
+            const captionsContainer = document.getElementById('captions-container');
+            
+            const line = document.createElement('div');
+            line.className = 'caption-line';
+            line.innerHTML = `
+                <div style="color: #ffcc00;">Original: ${original}</div>
+                <div style="color: #00ff88;">Translation: ${translated}</div>
+                <hr style="border: 1px solid #333; margin: 10px 0;">
+            `;
+            
+            captionsDiv.appendChild(line);
+            captionsContainer.style.display = 'block';
+            captionsDiv.scrollTop = captionsDiv.scrollHeight;
+        }
+
+        // Event Listeners
+        document.getElementById('startTranscription').addEventListener('click', () => {
+            if (!config.isTranscribing) {
+                config.isTranscribing = true;
+                config.userLanguage = document.getElementById('language-selector').value;
+                config.targetLanguage = document.getElementById('target-language-selector').value;
+                
+                initializeRecognition();
+                recognition.start();
+                
+                document.getElementById('startTranscription').textContent = 'Stop Translation';
+                document.getElementById('startTranscription').classList.add('active');
+            } else {
+                config.isTranscribing = false;
+                if (recognition) {
+                    recognition.stop();
+                }
+                
+                document.getElementById('startTranscription').textContent = 'Start Translation';
+                document.getElementById('startTranscription').classList.remove('active');
+            }
+        });
+
+        document.getElementById('testTranslation').addEventListener('click', async () => {
+            const testText = config.userLanguage === 'tr-TR' ? 'Merhaba, nasılsın?' : 'Hello, how are you?';
+            await translateAndDisplay(testText);
+        });
+
+        // Jitsi API Events
+        api.addEventListener('videoConferenceJoined', () => {
+            console.log('Joined conference:', config.roomName);
+        });
+    </script>
+</body>
+</html>
