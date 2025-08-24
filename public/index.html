@@ -105,6 +105,10 @@
     <div id="controls">
         <h3 style="margin-top: 0;">Translation Controls</h3>
         
+        <div id="mic-status" style="padding: 8px; margin: 10px 0; border-radius: 6px; font-size: 12px; text-align: center; background: rgba(255, 193, 7, 0.2); color: #ffc107;">
+            🎤 Microphone access needed
+        </div>
+        
         <div class="control-group">
             <label>My Language:</label>
             <select id="language-selector">
@@ -163,11 +167,54 @@
         // Speech Recognition Setup
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         let recognition = null;
+        let microphonePermissionGranted = false;
+
+        // Request microphone access
+        async function requestMicrophoneAccess() {
+            const micStatus = document.getElementById('mic-status');
+            
+            if (microphonePermissionGranted) {
+                return true;
+            }
+            
+            try {
+                micStatus.innerHTML = '🎤 Requesting microphone access...';
+                micStatus.style.background = 'rgba(33, 150, 243, 0.2)';
+                micStatus.style.color = '#2196f3';
+                
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                microphonePermissionGranted = true;
+                console.log('Microphone access granted');
+                
+                // Stop the stream since we only needed it for permission
+                stream.getTracks().forEach(track => track.stop());
+                
+                micStatus.innerHTML = '✅ Microphone ready';
+                micStatus.style.background = 'rgba(76, 175, 80, 0.2)';
+                micStatus.style.color = '#4caf50';
+                
+                return true;
+            } catch (error) {
+                console.error('Microphone access denied:', error);
+                
+                micStatus.innerHTML = '❌ Microphone access denied';
+                micStatus.style.background = 'rgba(244, 67, 54, 0.2)';
+                micStatus.style.color = '#f44336';
+                
+                alert('Microphone access is required for speech recognition. Please:\n\n1. Click the microphone icon in your browser address bar\n2. Select "Allow"\n3. Try again');
+                return false;
+            }
+        }
 
         function initializeRecognition() {
             if (!SpeechRecognition) {
-                alert('Speech recognition not supported in this browser');
-                return;
+                alert('Speech recognition not supported in this browser. Please use Chrome, Edge, or Safari.');
+                return false;
+            }
+
+            if (!microphonePermissionGranted) {
+                alert('Please allow microphone access first by clicking "Start Translation"');
+                return false;
             }
 
             recognition = new SpeechRecognition();
@@ -292,17 +339,33 @@
         }
 
         // Event Listeners
-        document.getElementById('startTranscription').addEventListener('click', () => {
+        document.getElementById('startTranscription').addEventListener('click', async () => {
             if (!config.isTranscribing) {
+                // First, request microphone access
+                const hasAccess = await requestMicrophoneAccess();
+                if (!hasAccess) {
+                    return;
+                }
+                
                 config.isTranscribing = true;
                 config.userLanguage = document.getElementById('language-selector').value;
                 config.targetLanguage = document.getElementById('target-language-selector').value;
                 
-                initializeRecognition();
-                recognition.start();
+                const initialized = initializeRecognition();
+                if (!initialized) {
+                    config.isTranscribing = false;
+                    return;
+                }
                 
-                document.getElementById('startTranscription').textContent = 'Stop Translation';
-                document.getElementById('startTranscription').classList.add('active');
+                try {
+                    recognition.start();
+                    document.getElementById('startTranscription').textContent = 'Stop Translation';
+                    document.getElementById('startTranscription').classList.add('active');
+                } catch (error) {
+                    console.error('Failed to start speech recognition:', error);
+                    alert('Failed to start speech recognition. Please try again.');
+                    config.isTranscribing = false;
+                }
             } else {
                 config.isTranscribing = false;
                 if (recognition) {
