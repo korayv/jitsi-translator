@@ -488,8 +488,37 @@
         </div>
         
         <div class="button-row">
-            <button id="startTranscription">Start Translation</button>
+            <button id="startTranscription">Start Transcription</button>
+            <button id="stopTranscription" disabled>Stop Transcription</button>
+        </div>
+        
+        <div class="button-row">
+            <button id="clearTranscripts">Clear</button>
+            <button id="downloadTranscripts">Download</button>
+        </div>
+        
+        <div class="button-row">
             <button id="testTranslation">Test Translation</button>
+            <button id="testTTS">Test TTS</button>
+        </div>
+        
+        <div style="border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 16px; margin-top: 16px;">
+            <h4 style="margin: 0 0 16px 0; font-size: 16px; color: white;">Text-to-Speech</h4>
+            <button id="toggleTTS" style="width: 100%; margin-bottom: 16px;">Enable TTS</button>
+            
+            <div class="control-group">
+                <label>ElevenLabs Voice:</label>
+                <select id="elevenlabs-voice-selector">
+                    <option value="">Loading voices...</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label>Browser Voice:</label>
+                <select id="tts-voice-selector">
+                    <!-- Will be populated dynamically -->
+                </select>
+            </div>
         </div>
     </div>
     
@@ -513,7 +542,10 @@
             isTranscribing: false,
             userId: 'user_' + Math.random().toString(36).substr(2, 9),
             ttsEnabled: true,
-            vadEnabled: true
+            vadEnabled: true,
+            transcriptHistory: [],
+            finalTranscript: '',
+            interimTranscript: ''
         };
 
         // Initialize Jitsi Meet
@@ -707,6 +739,14 @@
         // Translation function
         async function translateAndDisplay(text) {
             try {
+                // Add to history
+                const timestamp = new Date().toLocaleTimeString();
+                config.transcriptHistory.push({
+                    time: timestamp,
+                    text: text,
+                    speaker: 'You'
+                });
+                
                 const response = await fetch('/api/translate', {
                     method: 'POST',
                     headers: {
@@ -722,8 +762,12 @@
                 const data = await response.json();
                 displayTranslation(text, data.translatedText);
                 
-                // Generate and play TTS
-                await generateAndPlayTTS(data.translatedText);
+                // Generate and play TTS if enabled
+                if (config.ttsEnabled) {
+                    await generateAndPlayTTS(data.translatedText);
+                    // Also try browser TTS as fallback
+                    speakWithBrowserTTS(data.translatedText);
+                }
                 
             } catch (error) {
                 console.error('Translation error:', error);
@@ -777,6 +821,60 @@
                 console.error('Error playing TTS audio:', error);
             }
         }
+        
+        // Browser TTS functionality
+        const synth = window.speechSynthesis;
+        let voices = [];
+        
+        function loadBrowserVoices() {
+            voices = synth.getVoices();
+            const voiceSelector = document.getElementById('tts-voice-selector');
+            if (!voiceSelector) return;
+            
+            voiceSelector.innerHTML = '';
+            
+            const lang = config.targetLanguage.substring(0, 2);
+            const filteredVoices = voices.filter(voice => voice.lang.startsWith(lang));
+            
+            if (filteredVoices.length === 0) {
+                const option = document.createElement('option');
+                option.textContent = 'No voices available for selected language';
+                voiceSelector.appendChild(option);
+            } else {
+                filteredVoices.forEach((voice, index) => {
+                    const option = document.createElement('option');
+                    option.value = index;
+                    option.textContent = `${voice.name} (${voice.lang})`;
+                    voiceSelector.appendChild(option);
+                });
+            }
+        }
+        
+        function speakWithBrowserTTS(text) {
+            if (!config.ttsEnabled || !text.trim()) return;
+            
+            // Cancel any ongoing speech
+            synth.cancel();
+            
+            const utterance = new SpeechSynthesisUtterance(text);
+            const voiceSelector = document.getElementById('tts-voice-selector');
+            if (voiceSelector) {
+                const selectedVoiceIndex = voiceSelector.value;
+                
+                const lang = config.targetLanguage.substring(0, 2);
+                const filteredVoices = voices.filter(voice => voice.lang.startsWith(lang));
+                
+                if (filteredVoices[selectedVoiceIndex]) {
+                    utterance.voice = filteredVoices[selectedVoiceIndex];
+                }
+            }
+            
+            utterance.rate = 1.0;
+            utterance.pitch = 1.0;
+            utterance.volume = 0.8;
+            
+            synth.speak(utterance);
+        }
 
         function displayTranslation(original, translated) {
             const captionsDiv = document.getElementById('captions');
@@ -798,45 +896,91 @@
 
         // Event Listeners
         document.getElementById('startTranscription').addEventListener('click', async () => {
-            if (!config.isTranscribing) {
-                // First, request microphone access
-                const hasAccess = await requestMicrophoneAccess();
-                if (!hasAccess) {
-                    return;
-                }
-                
-                config.isTranscribing = true;
-                config.userLanguage = document.getElementById('language-selector').value;
-                config.targetLanguage = document.getElementById('target-language-selector').value;
-                config.selectedVoiceId = document.getElementById('voice-selector').value;
-                
-                const initialized = initializeRecognition();
-                if (!initialized) {
-                    config.isTranscribing = false;
-                    return;
-                }
-                
-                try {
-                    recognition.start();
-                    document.getElementById('startTranscription').textContent = 'Stop Translation';
-                    document.getElementById('startTranscription').classList.add('active');
-                    updateStatus('Listening...', 'active');
-                } catch (error) {
-                    console.error('Failed to start speech recognition:', error);
-                    alert('Failed to start speech recognition. Please try again.');
-                    config.isTranscribing = false;
-                    updateStatus('Error starting recognition', 'inactive');
-                }
-            } else {
-                config.isTranscribing = false;
-                if (recognition) {
-                    recognition.stop();
-                }
-                
-                document.getElementById('startTranscription').textContent = 'Start Translation';
-                document.getElementById('startTranscription').classList.remove('active');
-                updateStatus('Ready', 'inactive');
+            // First, request microphone access
+            const hasAccess = await requestMicrophoneAccess();
+            if (!hasAccess) {
+                return;
             }
+            
+            config.isTranscribing = true;
+            config.userLanguage = document.getElementById('language-selector').value;
+            config.targetLanguage = document.getElementById('target-language-selector').value;
+            config.selectedVoiceId = document.getElementById('voice-selector').value;
+            
+            const initialized = initializeRecognition();
+            if (!initialized) {
+                config.isTranscribing = false;
+                return;
+            }
+            
+            try {
+                recognition.start();
+                document.getElementById('startTranscription').disabled = true;
+                document.getElementById('stopTranscription').disabled = false;
+                updateStatus('Listening...', 'active');
+            } catch (error) {
+                console.error('Failed to start speech recognition:', error);
+                alert('Failed to start speech recognition. Please try again.');
+                config.isTranscribing = false;
+                updateStatus('Error starting recognition', 'inactive');
+            }
+        });
+        
+        document.getElementById('stopTranscription').addEventListener('click', () => {
+            config.isTranscribing = false;
+            if (recognition) {
+                recognition.stop();
+            }
+            
+            document.getElementById('startTranscription').disabled = false;
+            document.getElementById('stopTranscription').disabled = true;
+            updateStatus('Ready', 'inactive');
+        });
+        
+        document.getElementById('clearTranscripts').addEventListener('click', () => {
+            config.finalTranscript = '';
+            config.interimTranscript = '';
+            config.transcriptHistory = [];
+            document.getElementById('captions').innerHTML = '';
+            document.getElementById('captions-container').classList.add('hidden');
+        });
+        
+        document.getElementById('downloadTranscripts').addEventListener('click', () => {
+            if (config.transcriptHistory.length === 0) {
+                alert('No transcripts to download');
+                return;
+            }
+            
+            let content = `Transcription Session - ${new Date().toLocaleString()}\n`;
+            content += `Room: ${config.roomName}\n\n`;
+            
+            config.transcriptHistory.forEach(entry => {
+                content += `[${entry.time}] ${entry.speaker}: ${entry.text}\n`;
+            });
+            
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `transcript_${Date.now()}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+        
+        document.getElementById('toggleTTS').addEventListener('click', (e) => {
+            config.ttsEnabled = !config.ttsEnabled;
+            e.target.textContent = config.ttsEnabled ? 'Disable TTS' : 'Enable TTS';
+            e.target.classList.toggle('active', config.ttsEnabled);
+        });
+        
+        document.getElementById('testTTS').addEventListener('click', () => {
+            const testText = 'This is a test of the text to speech system.';
+            speakWithBrowserTTS(testText);
+        });
+        
+        document.getElementById('elevenlabs-voice-selector').addEventListener('change', (e) => {
+            config.selectedVoiceId = e.target.value;
+            console.log('Selected ElevenLabs voice:', config.selectedVoiceId);
         });
 
         document.getElementById('testTranslation').addEventListener('click', async () => {
@@ -872,11 +1016,37 @@
             console.log('Voice changed to:', config.selectedVoiceId);
         });
         
+        // Language selector change events
+        document.getElementById('language-selector').addEventListener('change', () => {
+            config.userLanguage = document.getElementById('language-selector').value;
+            if (recognition && config.isTranscribing) {
+                recognition.stop();
+                setTimeout(() => {
+                    recognition.lang = config.userLanguage;
+                    if (config.isTranscribing) {
+                        recognition.start();
+                    }
+                }, 500);
+            }
+            loadBrowserVoices();
+        });
+        
+        document.getElementById('target-language-selector').addEventListener('change', () => {
+            config.targetLanguage = document.getElementById('target-language-selector').value;
+            loadBrowserVoices();
+        });
+        
         // Load voices and check first time user when page loads
         window.addEventListener('load', async () => {
             await loadVoices();
+            loadBrowserVoices();
             checkFirstTimeUser();
         });
+        
+        // Load browser voices when they change
+        if (synth.onvoiceschanged !== undefined) {
+            synth.onvoiceschanged = loadBrowserVoices;
+        }
         
         // Jitsi API Events
         api.addEventListener('videoConferenceJoined', () => {
