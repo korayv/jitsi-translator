@@ -3,13 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jitsi Meet with Live Translation</title>
+    <title>Jitsi Meet with Live Transcription</title>
     <style>
         body {
             margin: 0;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #1a1a1a;
-            color: white;
         }
         
         #meet {
@@ -30,6 +29,49 @@
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
             border: 1px solid rgba(255, 255, 255, 0.1);
             width: 320px;
+            transition: all 0.3s ease;
+            transform: translateX(0);
+        }
+
+        #controls.hidden {
+            transform: translateX(calc(100% + 20px));
+        }
+
+        #controls-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(32, 32, 32, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 1001;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+            transition: all 0.3s ease;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #controls-toggle.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #controls-toggle:hover {
+            background: rgba(52, 52, 52, 0.95);
+            transform: scale(1.05);
+        }
+
+        #controls-toggle svg {
+            width: 20px;
+            height: 20px;
+            fill: white;
         }
         
         #controls button {
@@ -47,6 +89,13 @@
         
         #controls button:hover {
             background: #0f5ad1;
+            transform: translateY(-1px);
+        }
+        
+        #controls button:disabled {
+            background: #5a5a5a;
+            cursor: not-allowed;
+            transform: none;
         }
         
         #controls button.active {
@@ -55,6 +104,7 @@
         
         .control-group {
             margin: 16px 0;
+            padding: 0;
         }
         
         .control-group label {
@@ -75,6 +125,141 @@
             font-size: 14px;
         }
 
+        .control-group select option {
+            background: #2d2d2d;
+            color: white;
+        }
+
+        .button-row {
+            display: flex;
+            gap: 8px;
+            margin: 12px 0;
+        }
+
+        .button-row button {
+            flex: 1;
+            margin: 0;
+        }
+
+        #controls-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        #controls-header h3 {
+            margin: 0;
+            font-size: 18px;
+            color: white;
+        }
+
+        #hide-controls {
+            background: transparent;
+            border: none;
+            color: #b8bcc8;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+
+        #hide-controls:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        #hide-controls svg {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+        }
+
+        /* Language Setup Modal */
+        #language-setup-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            backdrop-filter: blur(10px);
+        }
+
+        #language-setup-modal.hidden {
+            display: none;
+        }
+
+        .modal-content {
+            background: rgba(32, 32, 32, 0.95);
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-width: 450px;
+            width: 90%;
+            text-align: center;
+            color: white;
+        }
+
+        .modal-content h2 {
+            margin: 0 0 30px 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .modal-content p {
+            margin: 0 0 30px 0;
+            color: #b8bcc8;
+            line-height: 1.5;
+        }
+
+        .language-selection {
+            margin: 20px 0;
+            text-align: left;
+        }
+
+        .language-selection label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: white;
+        }
+
+        .language-selection select {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: white;
+            font-size: 16px;
+        }
+
+        .modal-buttons {
+            margin-top: 30px;
+        }
+
+        .modal-buttons button {
+            background: #166ff4;
+            color: white;
+            border: none;
+            padding: 12px 32px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .modal-buttons button:hover {
+            background: #0f5ad1;
+        }
+
         #captions-container {
             position: fixed;
             bottom: 80px;
@@ -89,21 +274,183 @@
             backdrop-filter: blur(10px);
             max-height: 200px;
             overflow-y: auto;
+            transition: opacity 0.3s;
         }
-
+        
+        #captions-container.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
         .caption-line {
             color: white;
             font-size: 18px;
             line-height: 1.5;
             margin-bottom: 10px;
+            animation: fadeIn 0.3s;
+        }
+        
+        .caption-line.interim {
+            opacity: 0.7;
+            font-style: italic;
+        }
+        
+        .caption-line.original {
+            color: #ffcc00;
+            font-size: 16px;
+        }
+        
+        .caption-line.translated {
+            color: #00ff88;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
+        .message-container {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+        }
+        
+        .speaker-tag {
+            color: #0056ff;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        
+        #status {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-size: 14px;
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-indicator.active {
+            background: #00ff00;
+        }
+        
+        .status-indicator.inactive {
+            background: #ff0000;
+        }
+        
+        .status-indicator.processing {
+            background: #ffaa00;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        #language-selector {
+            margin-left: 10px;
+            padding: 5px;
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 5px;
+        }
+        
+        #tts-controls {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #444;
+        }
+        
+        #tts-voice-selector {
+            margin-left: 10px;
+            padding: 5px;
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 5px;
         }
     </style>
 </head>
 <body>
+    <!-- Language Setup Modal -->
+    <div id="language-setup-modal">
+        <div class="modal-content">
+            <h2>Welcome to Live Translation</h2>
+            <p>Please select your language preferences to get started with real-time translation.</p>
+            
+            <div class="language-selection">
+                <label for="modal-my-language">My Language:</label>
+                <select id="modal-my-language">
+                    <option value="tr-TR">Türkçe</option>
+                    <option value="en-US">English (US)</option>
+                    <option value="en-GB">English (UK)</option>
+                    <option value="es-ES">Spanish</option>
+                    <option value="fr-FR">French</option>
+                    <option value="de-DE">German</option>
+                </select>
+            </div>
+            
+            <div class="language-selection">
+                <label for="modal-target-language">Target Language:</label>
+                <select id="modal-target-language">
+                    <option value="en-US">English (US)</option>
+                    <option value="tr-TR">Türkçe</option>
+                    <option value="en-GB">English (UK)</option>
+                    <option value="es-ES">Spanish</option>
+                    <option value="fr-FR">French</option>
+                    <option value="de-DE">German</option>
+                </select>
+            </div>
+            
+            <div class="language-selection">
+                <label for="modal-voice-selector">Voice Selection:</label>
+                <select id="modal-voice-selector">
+                    <option value="pNInz6obpgDQGcFmaJgB">Loading voices...</option>
+                </select>
+            </div>
+            
+            <div class="modal-buttons">
+                <button id="start-with-settings">Start Translation</button>
+            </div>
+        </div>
+    </div>
+
     <div id="meet"></div>
     
+    <!-- Controls Toggle Button -->
+    <div id="controls-toggle">
+        <svg viewBox="0 0 24 24">
+            <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+        </svg>
+    </div>
+    
     <div id="controls">
-        <h3 style="margin-top: 0;">Translation Controls</h3>
+        <div id="controls-header">
+            <h3>Translation Controls</h3>
+            <button id="hide-controls">
+                <svg viewBox="0 0 24 24">
+                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                </svg>
+            </button>
+        </div>
         
         <div id="mic-status" style="padding: 8px; margin: 10px 0; border-radius: 6px; font-size: 12px; text-align: center; background: rgba(255, 193, 7, 0.2); color: #ffc107;">
             🎤 Microphone access needed
@@ -133,11 +480,25 @@
             </select>
         </div>
         
-        <button id="startTranscription">Start Translation</button>
-        <button id="testTranslation">Test Translation</button>
+        <div class="control-group">
+            <label>Voice Selection:</label>
+            <select id="voice-selector">
+                <option value="pNInz6obpgDQGcFmaJgB">Loading voices...</option>
+            </select>
+        </div>
+        
+        <div class="button-row">
+            <button id="startTranscription">Start Translation</button>
+            <button id="testTranslation">Test Translation</button>
+        </div>
     </div>
     
-    <div id="captions-container" style="display: none;">
+    <div id="status">
+        <span class="status-indicator inactive"></span>
+        <span id="status-text">Ready</span>
+    </div>
+    
+    <div id="captions-container" class="hidden">
         <div id="captions"></div>
     </div>
 
@@ -148,7 +509,11 @@
             roomName: 'TestTranslationRoom',
             userLanguage: 'tr-TR',
             targetLanguage: 'en-US',
-            isTranscribing: false
+            selectedVoiceId: 'pNInz6obpgDQGcFmaJgB',
+            isTranscribing: false,
+            userId: 'user_' + Math.random().toString(36).substr(2, 9),
+            ttsEnabled: true,
+            vadEnabled: true
         };
 
         // Initialize Jitsi Meet
@@ -168,6 +533,98 @@
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         let recognition = null;
         let microphonePermissionGranted = false;
+        
+        // Load available voices on page load
+        async function loadVoices() {
+            try {
+                const response = await fetch('/api/voices');
+                const data = await response.json();
+                const voiceSelector = document.getElementById('voice-selector');
+                const modalVoiceSelector = document.getElementById('modal-voice-selector');
+                
+                if (data.voices && data.voices.length > 0) {
+                    const voiceOptions = data.voices.map(voice => {
+                        return `<option value="${voice.voice_id}">${voice.name} (${voice.labels.accent || 'Unknown'})</option>`;
+                    }).join('');
+                    
+                    voiceSelector.innerHTML = voiceOptions;
+                    modalVoiceSelector.innerHTML = voiceOptions;
+                    
+                    // Set the first voice as default
+                    config.selectedVoiceId = data.voices[0].voice_id;
+                } else {
+                    const defaultOption = '<option value="pNInz6obpgDQGcFmaJgB">Default Voice</option>';
+                    voiceSelector.innerHTML = defaultOption;
+                    modalVoiceSelector.innerHTML = defaultOption;
+                }
+            } catch (error) {
+                console.error('Error loading voices:', error);
+                const errorOption = '<option value="pNInz6obpgDQGcFmaJgB">Default Voice (Error loading)</option>';
+                document.getElementById('voice-selector').innerHTML = errorOption;
+                document.getElementById('modal-voice-selector').innerHTML = errorOption;
+            }
+        }
+        
+        // Language Setup Modal Functions
+        function showLanguageModal() {
+            const modal = document.getElementById('language-setup-modal');
+            modal.classList.remove('hidden');
+        }
+        
+        function hideLanguageModal() {
+            const modal = document.getElementById('language-setup-modal');
+            modal.classList.add('hidden');
+        }
+        
+        function checkFirstTimeUser() {
+            const hasSetupLanguages = localStorage.getItem('jitsi-translation-setup');
+            if (!hasSetupLanguages) {
+                showLanguageModal();
+                return false;
+            } else {
+                // Load saved preferences
+                const savedConfig = JSON.parse(localStorage.getItem('jitsi-translation-config') || '{}');
+                config.userLanguage = savedConfig.userLanguage || config.userLanguage;
+                config.targetLanguage = savedConfig.targetLanguage || config.targetLanguage;
+                config.selectedVoiceId = savedConfig.selectedVoiceId || config.selectedVoiceId;
+                
+                // Update UI with saved preferences
+                document.getElementById('language-selector').value = config.userLanguage;
+                document.getElementById('target-language-selector').value = config.targetLanguage;
+                document.getElementById('voice-selector').value = config.selectedVoiceId;
+                
+                return true;
+            }
+        }
+        
+        function saveLanguagePreferences() {
+            localStorage.setItem('jitsi-translation-setup', 'true');
+            localStorage.setItem('jitsi-translation-config', JSON.stringify({
+                userLanguage: config.userLanguage,
+                targetLanguage: config.targetLanguage,
+                selectedVoiceId: config.selectedVoiceId
+            }));
+        }
+        
+        // Controls visibility functions
+        function hideControls() {
+            document.getElementById('controls').classList.add('hidden');
+            document.getElementById('controls-toggle').classList.add('visible');
+        }
+        
+        function showControls() {
+            document.getElementById('controls').classList.remove('hidden');
+            document.getElementById('controls-toggle').classList.remove('visible');
+        }
+        
+        // Status update function
+        function updateStatus(text, type = 'inactive') {
+            const statusText = document.getElementById('status-text');
+            const indicator = document.querySelector('.status-indicator');
+            
+            statusText.textContent = text;
+            indicator.className = `status-indicator ${type}`;
+        }
 
         // Request microphone access
         async function requestMicrophoneAccess() {
@@ -283,7 +740,7 @@
                     },
                     body: JSON.stringify({
                         text: text,
-                        voiceId: 'pNInz6obpgDQGcFmaJgB'
+                        voiceId: config.selectedVoiceId
                     })
                 });
 
@@ -325,17 +782,18 @@
             const captionsDiv = document.getElementById('captions');
             const captionsContainer = document.getElementById('captions-container');
             
-            const line = document.createElement('div');
-            line.className = 'caption-line';
-            line.innerHTML = `
-                <div style="color: #ffcc00;">Original: ${original}</div>
-                <div style="color: #00ff88;">Translation: ${translated}</div>
-                <hr style="border: 1px solid #333; margin: 10px 0;">
+            const messageContainer = document.createElement('div');
+            messageContainer.className = 'message-container';
+            messageContainer.innerHTML = `
+                <div class="caption-line original">Original: ${original}</div>
+                <div class="caption-line translated">Translation: ${translated}</div>
             `;
             
-            captionsDiv.appendChild(line);
-            captionsContainer.style.display = 'block';
+            captionsDiv.appendChild(messageContainer);
+            captionsContainer.classList.remove('hidden');
             captionsDiv.scrollTop = captionsDiv.scrollHeight;
+            
+            updateStatus('Translation complete', 'active');
         }
 
         // Event Listeners
@@ -350,6 +808,7 @@
                 config.isTranscribing = true;
                 config.userLanguage = document.getElementById('language-selector').value;
                 config.targetLanguage = document.getElementById('target-language-selector').value;
+                config.selectedVoiceId = document.getElementById('voice-selector').value;
                 
                 const initialized = initializeRecognition();
                 if (!initialized) {
@@ -361,10 +820,12 @@
                     recognition.start();
                     document.getElementById('startTranscription').textContent = 'Stop Translation';
                     document.getElementById('startTranscription').classList.add('active');
+                    updateStatus('Listening...', 'active');
                 } catch (error) {
                     console.error('Failed to start speech recognition:', error);
                     alert('Failed to start speech recognition. Please try again.');
                     config.isTranscribing = false;
+                    updateStatus('Error starting recognition', 'inactive');
                 }
             } else {
                 config.isTranscribing = false;
@@ -374,6 +835,7 @@
                 
                 document.getElementById('startTranscription').textContent = 'Start Translation';
                 document.getElementById('startTranscription').classList.remove('active');
+                updateStatus('Ready', 'inactive');
             }
         });
 
@@ -382,9 +844,49 @@
             await translateAndDisplay(testText);
         });
 
+        // Modal event listeners
+        document.getElementById('start-with-settings').addEventListener('click', () => {
+            config.userLanguage = document.getElementById('modal-my-language').value;
+            config.targetLanguage = document.getElementById('modal-target-language').value;
+            config.selectedVoiceId = document.getElementById('modal-voice-selector').value;
+            
+            // Update main controls to match modal selections
+            document.getElementById('language-selector').value = config.userLanguage;
+            document.getElementById('target-language-selector').value = config.targetLanguage;
+            document.getElementById('voice-selector').value = config.selectedVoiceId;
+            
+            saveLanguagePreferences();
+            hideLanguageModal();
+            
+            // Auto-start transcription
+            document.getElementById('startTranscription').click();
+        });
+        
+        // Controls visibility event listeners
+        document.getElementById('hide-controls').addEventListener('click', hideControls);
+        document.getElementById('controls-toggle').addEventListener('click', showControls);
+        
+        // Voice selector change event
+        document.getElementById('voice-selector').addEventListener('change', () => {
+            config.selectedVoiceId = document.getElementById('voice-selector').value;
+            console.log('Voice changed to:', config.selectedVoiceId);
+        });
+        
+        // Load voices and check first time user when page loads
+        window.addEventListener('load', async () => {
+            await loadVoices();
+            checkFirstTimeUser();
+        });
+        
         // Jitsi API Events
         api.addEventListener('videoConferenceJoined', () => {
             console.log('Joined conference:', config.roomName);
+            updateStatus('Conference joined', 'active');
+        });
+        
+        api.addEventListener('videoConferenceLeft', () => {
+            console.log('Left conference');
+            updateStatus('Conference left', 'inactive');
         });
     </script>
 </body>
