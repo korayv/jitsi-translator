@@ -1,7 +1,7 @@
 const express = require('express');
 const path = require('path');
 const { Translate } = require('@google-cloud/translate').v2;
-const { ElevenLabs } = require("elevenlabs");
+const { ElevenLabsClient } = require("elevenlabs");
 
 const app = express();
 
@@ -23,7 +23,7 @@ try {
 let elevenlabs;
 try {
     if (process.env.ELEVENLABS_API_KEY) {
-        elevenlabs = new ElevenLabs({
+        elevenlabs = new ElevenLabsClient({
             apiKey: process.env.ELEVENLABS_API_KEY
         });
     }
